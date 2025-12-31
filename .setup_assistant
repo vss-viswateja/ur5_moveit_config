@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: swarm_description
+    relative_path: urdf/ur5_assembly_moveit.urdf
+  srdf:
+    relative_path: config/ur5_assembly.srdf
+  package_settings:
+    author_name: Viswa Teja
+    author_email: vss.viswatejabottu@gmail.com
+    generated_timestamp: 1767003967
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

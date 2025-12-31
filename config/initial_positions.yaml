@@ -1,0 +1,9 @@
+# Default initial positions for ur5_assembly's ros2_control fake system
+
+initial_positions:
+  base_link1_joint: 0
+  link1_link2p1_joint: 0
+  link2p3_link3_joint: 0
+  link3_link4_joint: 0
+  link4_link5_joint: 0
+  link5_link6_joint: 0
