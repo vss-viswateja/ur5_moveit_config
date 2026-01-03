@@ -2,6 +2,15 @@ cmake_minimum_required(VERSION 3.22)
 project(ur5_moveit_config)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+
+# Install Python scripts
+install(
+  PROGRAMS
+    scripts/test_moveit_config.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME test_moveit_config
+)
 
 ament_package()
 
