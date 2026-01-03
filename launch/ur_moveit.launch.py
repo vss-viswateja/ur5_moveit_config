@@ -1,136 +1,157 @@
-import os
+"""
+MoveIt2 Launch File for UR5 Assembly with Namespace Support
 
+This launch file starts:
+- move_group: MoveIt2 motion planning node
+- rviz2: (optional) visualization with MoveIt plugin
+
+Usage:
+    # Default namespace (ur5)
+    ros2 launch ur5_moveit_config ur_moveit.launch.py
+    
+    # Custom namespace
+    ros2 launch ur5_moveit_config ur_moveit.launch.py robot_namespace:=robot1
+    
+    # Without RViz
+    ros2 launch ur5_moveit_config ur_moveit.launch.py use_rviz:=false
+"""
+
+import os
 from launch import LaunchDescription
-from launch.actions import (
-    DeclareLaunchArgument,
-    IncludeLaunchDescription,
-)
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
-from srdfdom.srdf import SRDF
 from moveit_configs_utils import MoveItConfigsBuilder
-from moveit_configs_utils.launch_utils import (
-    add_debuggable_node,
-    DeclareBooleanLaunchArg,
-)
 
 
 def generate_launch_description():
-    moveit_config = MoveItConfigsBuilder("ur5_assembly", package_name="ur5_moveit_config").to_moveit_configs()
+    # Build MoveIt config
+    moveit_config = MoveItConfigsBuilder(
+        "ur5_assembly", 
+        package_name="ur5_moveit_config"
+    ).to_moveit_configs()
 
     launch_package_path = moveit_config.package_path
 
-    ld = LaunchDescription()
+    # Declare launch arguments
+    declared_arguments = []
     
-    ld.add_action(
-        DeclareBooleanLaunchArg(
-            "debug",
-            default_value=False,
-            description="By default, we are not in debug mode",
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "robot_namespace",
+            default_value="ur5",
+            description="Namespace for the robot (matches robot_state_publisher namespace)"
         )
     )
-
-    ld.add_action(
+    
+    declared_arguments.append(
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="true",
+            description="Use simulation time"
         )
     )
     
-    virtual_joints_launch = (
-        launch_package_path / "launch/static_virtual_joint_tfs.launch.py"
-    )
-
-    if virtual_joints_launch.exists():
-        ld.add_action(
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(str(virtual_joints_launch)),
-            )
+    declared_arguments.append(
+        DeclareLaunchArgument(
+            "use_rviz",
+            default_value="true",
+            description="Launch RViz with MoveIt plugin"
         )
-
+    )
     
-    ld.add_action(DeclareBooleanLaunchArg("debug", default_value=False))
-    ld.add_action(
-        DeclareBooleanLaunchArg("allow_trajectory_execution", default_value=True)
-    )
-    ld.add_action(
-        DeclareBooleanLaunchArg("publish_monitored_planning_scene", default_value=True)
-    )
-    # load non-default MoveGroup capabilities (space separated)
-    ld.add_action(
+    declared_arguments.append(
         DeclareLaunchArgument(
-            "capabilities",
-            default_value=moveit_config.move_group_capabilities["capabilities"],
+            "allow_trajectory_execution",
+            default_value="true",
+            description="Allow MoveIt to execute trajectories"
         )
     )
-    # inhibit these default MoveGroup capabilities (space separated)
-    ld.add_action(
+    
+    declared_arguments.append(
         DeclareLaunchArgument(
-            "disable_capabilities",
-            default_value=moveit_config.move_group_capabilities["disable_capabilities"],
+            "publish_monitored_planning_scene",
+            default_value="true",
+            description="Publish the monitored planning scene"
         )
     )
 
-    # do not copy dynamics information from /joint_states to internal robot monitoring
-    # default to false, because almost nothing in move_group relies on this information
-    ld.add_action(DeclareBooleanLaunchArg("monitor_dynamics", default_value=False))
+    # Get launch configurations
+    robot_namespace = LaunchConfiguration("robot_namespace")
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    use_rviz = LaunchConfiguration("use_rviz")
+    allow_trajectory_execution = LaunchConfiguration("allow_trajectory_execution")
+    publish_monitored_planning_scene = LaunchConfiguration("publish_monitored_planning_scene")
 
-    should_publish = LaunchConfiguration("publish_monitored_planning_scene")
-
+    # MoveGroup configuration
     move_group_configuration = {
         "publish_robot_description_semantic": True,
-        "use_sim_time": LaunchConfiguration("use_sim_time"),
-        "allow_trajectory_execution": LaunchConfiguration("allow_trajectory_execution"),
-        # Note: Wrapping the following values is necessary so that the parameter value can be the empty string
-        "capabilities": ParameterValue(
-            LaunchConfiguration("capabilities"), value_type=str
-        ),
-        "disable_capabilities": ParameterValue(
-            LaunchConfiguration("disable_capabilities"), value_type=str
-        ),
-        # Publish the planning scene of the physical robot so that rviz plugin can know actual robot
-        "publish_planning_scene": should_publish,
-        "publish_geometry_updates": should_publish,
-        "publish_state_updates": should_publish,
-        "publish_transforms_updates": should_publish,
+        "use_sim_time": use_sim_time,
+        "allow_trajectory_execution": allow_trajectory_execution,
+        "publish_planning_scene": publish_monitored_planning_scene,
+        "publish_geometry_updates": publish_monitored_planning_scene,
+        "publish_state_updates": publish_monitored_planning_scene,
+        "publish_transforms_updates": publish_monitored_planning_scene,
         "monitor_dynamics": False,
     }
 
+    # Combine all parameters
     move_group_params = [
         moveit_config.to_dict(),
         move_group_configuration,
     ]
 
-    add_debuggable_node(
-        ld,
+    # MoveGroup node with namespace
+    # Remappings ensure move_group connects to the namespaced robot
+    move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
-        commands_file=str(moveit_config.package_path / "launch" / "gdb_settings.gdb"),
+        namespace=robot_namespace,
         output="screen",
         parameters=move_group_params,
-        extra_debug_args=["--debug"],
-        # Set the display variable, in case OpenGL code is used internally
-        additional_env={"DISPLAY": os.environ.get("DISPLAY", "")},
-    )
-    ld.add_action(
-        DeclareBooleanLaunchArg("use_rviz", default_value=True)
-    )
-
-    ld.add_action(
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(
-                str(launch_package_path / "launch/moveit_rviz.launch.py")
-            ),
-            condition=IfCondition(LaunchConfiguration("use_rviz")),
-        )
+        remappings=[
+            # Remap joint_states to namespaced topic
+            ("joint_states", "joint_states"),
+            # Robot description is published by namespaced robot_state_publisher
+            ("robot_description", "robot_description"),
+        ],
     )
 
-    return ld
-
-
+    # RViz node with MoveIt config
+    rviz_config_file = PathJoinSubstitution([
+        FindPackageShare("ur5_moveit_config"),
+        "config",
+        "moveit.rviz"
+    ])
     
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="screen",
+        arguments=["-d", rviz_config_file],
+        parameters=[
+            moveit_config.robot_description,
+            moveit_config.robot_description_semantic,
+            moveit_config.robot_description_kinematics,
+            moveit_config.planning_pipelines,
+            moveit_config.joint_limits,
+            {"use_sim_time": use_sim_time},
+        ],
+        condition=IfCondition(use_rviz),
+    )
+
+    return LaunchDescription(
+        declared_arguments + [
+            move_group_node,
+            rviz_node,
+        ]
+    )
+
+

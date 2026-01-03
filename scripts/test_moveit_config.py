@@ -3,9 +3,10 @@
 MoveIt2 Motion Test Node for UR5
 
 This node tests MoveIt2 by actually moving the robot arm to goal poses.
+Configured to work with namespaced robot (ur5) and frame_prefix (ur5/).
 
 Usage:
-    # Move to predefined joint positions
+    # Move to default 'ready' pose (uses ur5 namespace by default)
     ros2 run ur5_moveit_config test_moveit_config
     
     # Move to a specific named pose
@@ -17,6 +18,9 @@ Usage:
     
     # Plan only (don't execute)
     ros2 run ur5_moveit_config test_moveit_config --ros-args -p execute:=false
+    
+    # Custom namespace
+    ros2 run ur5_moveit_config test_moveit_config --ros-args -p robot_namespace:=robot1
 """
 
 import sys
@@ -73,6 +77,7 @@ class MoveItMotionTester(Node):
         self.callback_group = ReentrantCallbackGroup()
         
         # Parameters
+        self.declare_parameter('robot_namespace', 'ur5')
         self.declare_parameter('planning_group', 'arm')
         self.declare_parameter('execute', True)
         self.declare_parameter('target_pose', 'ready')  # Named pose to go to
@@ -80,9 +85,10 @@ class MoveItMotionTester(Node):
         self.declare_parameter('target_y', 0.0)
         self.declare_parameter('target_z', 0.0)
         self.declare_parameter('use_cartesian', False)  # Use cartesian vs joint goal
-        self.declare_parameter('end_effector_link', 'link6')
+        self.declare_parameter('end_effector_link', 'ur5/link6_1')  # With frame_prefix
         self.declare_parameter('planning_time', 5.0)
         
+        self.robot_namespace = self.get_parameter('robot_namespace').value
         self.planning_group = self.get_parameter('planning_group').value
         self.execute = self.get_parameter('execute').value
         self.target_pose_name = self.get_parameter('target_pose').value
@@ -99,10 +105,14 @@ class MoveItMotionTester(Node):
         self.goal_done = False
         self.goal_result = None
         
+        # Build topic names with namespace
+        joint_states_topic = f'/{self.robot_namespace}/joint_states' if self.robot_namespace else '/joint_states'
+        move_action_topic = f'/{self.robot_namespace}/move_action' if self.robot_namespace else '/move_action'
+        
         # Subscribers
         self.joint_state_sub = self.create_subscription(
             JointState,
-            'joint_states',
+            joint_states_topic,
             self.joint_state_callback,
             10,
             callback_group=self.callback_group
@@ -112,12 +122,13 @@ class MoveItMotionTester(Node):
         self.move_group_client = ActionClient(
             self,
             MoveGroup,
-            'move_action',
+            move_action_topic,
             callback_group=self.callback_group
         )
         
         self.get_logger().info('=' * 60)
         self.get_logger().info('MoveIt2 Motion Tester Started')
+        self.get_logger().info(f'Robot Namespace: {self.robot_namespace}')
         self.get_logger().info(f'Planning Group: {self.planning_group}')
         self.get_logger().info(f'Execute Motion: {self.execute}')
         self.get_logger().info('=' * 60)
@@ -173,8 +184,9 @@ class MoveItMotionTester(Node):
         goal.request.max_velocity_scaling_factor = 0.5
         goal.request.max_acceleration_scaling_factor = 0.5
         
-        # Workspace bounds
-        goal.request.workspace_parameters.header.frame_id = 'world'
+        # Workspace bounds - use frame with namespace prefix
+        frame_prefix = f'{self.robot_namespace}/' if self.robot_namespace else ''
+        goal.request.workspace_parameters.header.frame_id = f'{frame_prefix}world'
         goal.request.workspace_parameters.header.stamp = self.get_clock().now().to_msg()
         goal.request.workspace_parameters.min_corner.x = -2.0
         goal.request.workspace_parameters.min_corner.y = -2.0
@@ -220,8 +232,11 @@ class MoveItMotionTester(Node):
         goal.request.max_velocity_scaling_factor = 0.3
         goal.request.max_acceleration_scaling_factor = 0.3
         
+        # Frame prefix for namespaced TF frames
+        frame_prefix = f'{self.robot_namespace}/' if self.robot_namespace else ''
+        
         # Workspace bounds
-        goal.request.workspace_parameters.header.frame_id = 'world'
+        goal.request.workspace_parameters.header.frame_id = f'{frame_prefix}world'
         goal.request.workspace_parameters.header.stamp = self.get_clock().now().to_msg()
         goal.request.workspace_parameters.min_corner.x = -2.0
         goal.request.workspace_parameters.min_corner.y = -2.0
@@ -236,7 +251,7 @@ class MoveItMotionTester(Node):
         
         # Position constraint
         position_constraint = PositionConstraint()
-        position_constraint.header.frame_id = 'world'
+        position_constraint.header.frame_id = f'{frame_prefix}world'
         position_constraint.header.stamp = self.get_clock().now().to_msg()
         position_constraint.link_name = self.ee_link
         
@@ -260,7 +275,7 @@ class MoveItMotionTester(Node):
         
         # Orientation constraint
         orientation_constraint = OrientationConstraint()
-        orientation_constraint.header.frame_id = 'world'
+        orientation_constraint.header.frame_id = f'{frame_prefix}world'
         orientation_constraint.header.stamp = self.get_clock().now().to_msg()
         orientation_constraint.link_name = self.ee_link
         orientation_constraint.orientation.x = qx

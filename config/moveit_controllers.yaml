@@ -1,4 +1,5 @@
 # MoveIt uses this configuration for controller management
+# Configured for ur5 namespace with frame_prefix: ur5/
 
 moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
 
@@ -15,5 +16,7 @@ moveit_simple_controller_manager:
       - link3_link4_joint
       - link4_link5_joint
       - link5_link6_joint
+    # action_ns is relative - MoveIt constructs: <controller_name>/<action_ns>
+    # Since move_group runs under /ur5 namespace, full path becomes /ur5/arm_controller/follow_joint_trajectory
     action_ns: follow_joint_trajectory
     default: true
