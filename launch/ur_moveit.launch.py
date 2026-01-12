@@ -150,7 +150,7 @@ def generate_launch_description():
     return LaunchDescription(
         declared_arguments + [
             move_group_node,
-            rviz_node,
+            #rviz_node,
         ]
     )
 
