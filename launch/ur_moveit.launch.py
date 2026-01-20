@@ -112,7 +112,7 @@ def generate_launch_description():
     move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
-        namespace=robot_namespace,
+        #namespace=robot_namespace,
         output="screen",
         parameters=move_group_params,
         remappings=[
@@ -150,7 +150,7 @@ def generate_launch_description():
     return LaunchDescription(
         declared_arguments + [
             move_group_node,
-            #rviz_node,
+            rviz_node,
         ]
     )
 
