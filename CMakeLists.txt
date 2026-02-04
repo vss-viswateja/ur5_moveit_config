@@ -12,6 +12,13 @@ install(
   RENAME test_moveit_config
 )
 
+install(
+  PROGRAMS
+    scripts/move_to_tf_frame.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME move_to_tf_frame
+)
+
 ament_package()
 
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/launch")
